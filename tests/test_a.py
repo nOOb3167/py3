@@ -1,11 +1,9 @@
-import py2.a
+import py3.a
 
 def qq() -> int:
     return 3
 
 def test_a():
-    py2.a.z(3)
-    #py2.a.q()
+    py3.a.z(3)
     z: str = qq()
     print('z')
-    #assert 0
