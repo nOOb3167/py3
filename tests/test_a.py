@@ -42,57 +42,28 @@ async def test_a01() -> None:
     async def b() -> None:
         nonlocal ran
         ran = True
+
     t = asyncio.get_running_loop().create_task(b())
     assert not ran and not t.done()
 
 
 @pytest.mark.asyncio
-async def test_a02() -> None:
-    ran = False
-    async def b() -> None:
-        nonlocal ran
-        ran = True
-        try:
-            await noopx()
-        except BaseException as e:
-            assert e.args[0] == 'xcanc'
-            raise
-    t = asyncio.get_running_loop().create_task(b())
-    assert not t.done() and not ran
-    await noop1()
-    t.cancel('xcanc')
-    assert not t.done() and ran
-    try:
-        await t
-    except BaseException as e:
-        pass
-    with pytest.raises(asyncio.CancelledError) as ei:
-        await t
-    assert 'xcanc' in str(ei.value)
-
-
-@pytest.mark.asyncio
 async def test_a02a() -> None:
-    async def c() -> None:
-        with pytest.raises(asyncio.CancelledError) as ei:
-            await noopx()
-        assert 'xcanc' in str(ei.value)
-        raise ei.value
     async def b() -> None:
         with pytest.raises(asyncio.CancelledError) as ei:
-            await c()
-        assert 'xcanc' in str(ei.value)
-        raise ei.value
+            await noopx()
+        raise RuntimeError() from ei.value
+
     t = asyncio.get_running_loop().create_task(b())
-    assert not t.done()
     await noop1()
+
     t.cancel('xcanc')
-    assert not t.done()
-    with pytest.raises(asyncio.CancelledError) as ei:
-        _, _ = await asyncio.wait([t])
-        assert t.done() and t.cancelled()
+    _, _ = await asyncio.wait([t])
+    assert t.done() and not t.cancelled()
+    
+    with pytest.raises(RuntimeError) as ei:
         t.result()
-    assert 'xcanc' in str(ei.value)
+    assert 'xcanc' in str(ei.value.__cause__)
 
 
 @pytest.mark.asyncio
@@ -100,33 +71,27 @@ async def test_a02b() -> None:
     async def b() -> None:
         with pytest.raises(asyncio.CancelledError) as ei:
             await noopx()
-        raise RuntimeError('re') from ei.value
+        raise ei.value
+    
     t = asyncio.get_running_loop().create_task(b())
     await noop1()
-    t.cancel('xcanc')
-    with pytest.raises(RuntimeError) as ei:
-        _, _ = await asyncio.wait([t])
-        assert t.done() and not t.cancelled()
-        t.result()
-    assert 'xcanc' in str(ei.value.__cause__)
 
-
-@pytest.mark.asyncio
-async def test_a03a() -> None:
-    async def b() -> None:
-        await noopx()
-    t = asyncio.get_running_loop().create_task(b())
-    await noop1()
     t.cancel('xcanc')
     _, _ = await asyncio.wait([t])
-    assert t.done() and not t.cancelled()
+    assert t.done() and t.cancelled()
+
+    with pytest.raises(asyncio.CancelledError) as ei:
+        t.result()
+    assert 'xcanc' in str(ei.value.__context__)
 
 
 @pytest.mark.asyncio
-async def test_a03b() -> None:
+async def test_a03() -> None:
     async def b() -> None:
         await noopx()
+
     t = asyncio.get_running_loop().create_task(b())
+
     t.cancel('xcanc')
     with pytest.raises(asyncio.CancelledError) as ei:
         await t
@@ -134,18 +99,17 @@ async def test_a03b() -> None:
     with pytest.raises(asyncio.CancelledError) as ei2:
         await t
     ce2 = ei2.value
-    #_, _ = await asyncio.wait([t])
+
     assert t.done() and t.cancelled()
-    #ce = t._make_cancelled_error()
-    warn(f'ce {ce}')
+    warn(f'ce {ce=} {ce2=}')
+
 
 def test_zz() -> None:
     import importlib.resources
     import subprocess
     import sys
-    with importlib.resources.path('pp', 'inout.py') as p:
-        #subprocess.check_call([sys.executable, str(p)])
-        with subprocess.Popen([sys.executable, '-u', str(p)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=False, encoding='UTF-8') as p:
+    with importlib.resources.path('pp', 'inout.py') as pi:
+        with subprocess.Popen([sys.executable, '-u', str(pi)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=False, encoding='UTF-8') as p:
             so, se = p.communicate('helloworld')
             warn(f'{so=} {se=}')
             assert p.returncode == 0
