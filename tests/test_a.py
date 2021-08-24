@@ -1,10 +1,15 @@
 import asyncio
 import logging
 import pytest
+import re
+import traceback
 
 ALOT = 99999
 
 warn = logging.warning
+
+def strexc(v: BaseException):
+    return ''.join(traceback.format_exception(type(v), v, v.__traceback__))
 
 async def noop1() -> None:
     await asyncio.sleep(0)
@@ -83,6 +88,8 @@ async def test_a02b() -> None:
     with pytest.raises(asyncio.CancelledError) as ei:
         t.result()
     assert 'xcanc' in str(ei.value.__context__)
+
+    warn(strexc(ei.value))
 
 
 @pytest.mark.asyncio
