@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 testpaths = [
     "tests"
 ]
-log_cli = false
+log_cli = true
 log_cli_level = "WARNING"
 addopts = "--mypy"
 
