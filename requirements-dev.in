@@ -1,0 +1,5 @@
+tox
+pytest >= 6.0
+mypy
+pytest-mypy
+pytest-asyncio

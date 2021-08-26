@@ -1,13 +1,11 @@
 [build-system]
-requires = ["setuptools", "wheel", "setuptools_scm[toml]"]
+requires = ["setuptools", "wheel", "setuptools_scm[toml]", "pip-tools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
 
 [tool.pytest.ini_options]
-testpaths = [
-    "tests"
-]
+testpaths = ["tests"]
 log_cli = true
 log_cli_level = "WARNING"
 addopts = "--mypy"
@@ -27,3 +25,14 @@ warn_redundant_casts = true
 warn_return_any = true
 implicit_reexport = false
 strict_equality = true
+
+[tool.tox]
+legacy_tox_ini = """
+[tox]
+isolated_build = true
+envlist = py310
+
+[testenv]
+deps = -rrequirements-dev.txt
+commands = pytest
+"""
