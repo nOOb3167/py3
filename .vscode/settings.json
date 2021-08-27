@@ -1,5 +1,5 @@
 {
-    "python.testing.pytestArgs": [],
+    "python.testing.pytestArgs": ["--pypath_src"],
     "python.testing.unittestEnabled": false,
     "python.testing.nosetestsEnabled": false,
     "python.testing.pytestEnabled": true,
