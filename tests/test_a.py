@@ -20,6 +20,36 @@ async def noopx() -> None:
 
 
 @pytest.mark.asyncio
+async def test_await_impl() -> None:
+    fut = asyncio.get_running_loop().create_future()
+    nit = 0
+    async def b() -> None:
+        await c()
+    async def c() -> None:
+        warn(f'prez')
+        z = await XAwait()
+        warn(f'posz {z=}')
+    class XAwait:
+        def __await__(self):
+            if not fut.done():
+                asyncio.get_running_loop().call_soon(cb)
+                fut._asyncio_future_blocking = True
+                yield fut
+                assert fut.done()
+            else:
+                return fut.result()
+    def cb():
+        nonlocal nit
+        if (nit := nit + 1) <= 3:
+            warn('cb a')
+            asyncio.get_running_loop().call_soon(cb)
+        else:
+            warn('cb b')
+            fut.set_result('xdone')
+    await b()
+
+
+@pytest.mark.asyncio
 async def test_b() -> None:
     async def b() -> None:
         warn('presleep')
@@ -28,6 +58,9 @@ async def test_b() -> None:
     t = asyncio.get_running_loop().create_task(b())
     await asyncio.sleep(0)
     warn('fin')
+    t.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await t
 
 
 @pytest.mark.asyncio
