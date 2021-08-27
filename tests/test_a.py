@@ -49,6 +49,15 @@ async def test_await_impl() -> None:
     await b()
 
 
+def test_zzz():
+    import importlib.metadata
+    import packaging.version
+    import pp
+    warn(f'''{importlib.metadata.version('perder_si_py3')=}''')
+    warn(f'''{packaging.version.parse(importlib.metadata.version('perder_si_py3'))=}''')
+    warn(f'{pp.__version__}')
+
+
 @pytest.mark.asyncio
 async def test_b() -> None:
     async def b() -> None:
