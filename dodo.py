@@ -32,5 +32,6 @@ def task_build():
 def task_upload_test():
     return {
         "actions": ["py -m twine upload -r testpypi dist/*"],
+        "task_dep": ["build"],
         "verbosity": 2,
     }
