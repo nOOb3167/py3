@@ -14,16 +14,11 @@ def task_clean_dist():
         for f in list(tgz) + list(whl):
             f.unlink()
 
-    return {
-        "actions": [clean_dist],
-    }
+    return {"actions": [clean_dist]}
 
 
 def task_build_dist():
-    return {
-        "actions": ["py -m build --sdist --wheel ."],
-        "task_dep": ["clean_dist"],
-    }
+    return {"actions": ["py -m build --sdist --wheel ."], "task_dep": ["clean_dist"]}
 
 
 def task_build_deps():
