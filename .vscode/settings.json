@@ -4,10 +4,11 @@
     "python.testing.nosetestsEnabled": false,
     "python.testing.pytestEnabled": true,
     "files.exclude": {
-        "**/__pycache__": true,
-        "**/.mypy_cache": true,
+        "**/*.doit.db.*": true,
+        "**/*.egg-info": true,
         "**/.pytest_cache": true,
-        "**/*.egg-info": true
+        "**/.mypy_cache": true,
+        "**/__pycache__": true,
     },
     "python.formatting.provider": "black"
 }

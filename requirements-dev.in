@@ -1,6 +1,9 @@
-tox
-pytest >= 6.0
+build
+doit
 mypy
-pytest-mypy
+pip-tools
+pytest >= 6.0
 pytest-asyncio
+pytest-mypy
+tox
 twine
