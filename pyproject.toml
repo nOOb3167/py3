@@ -33,6 +33,6 @@ isolated_build = true
 envlist = py310
 
 [testenv]
-deps = -rrequirements-dev.txt
+deps = -rrequirements.txt
 commands = pytest
 """

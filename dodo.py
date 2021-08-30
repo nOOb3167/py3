@@ -1,13 +1,10 @@
 import pathlib
 
-DOIT_CONFIG = {"default_tasks": ["t0"]}
+DOIT_CONFIG = {"default_tasks": ["default"]}
 
 
-def task_t0():
-    return {
-        "actions": ["py -m pip list"],
-        "verbosity": 2,
-    }
+def task_default():
+    return {"actions": [lambda: None]}
 
 
 def task_clean_dist():
@@ -22,16 +19,27 @@ def task_clean_dist():
     }
 
 
-def task_build():
+def task_build_dist():
     return {
         "actions": ["py -m build --sdist --wheel ."],
         "task_dep": ["clean_dist"],
     }
 
 
+def task_build_deps():
+    return {
+        "actions": ["pip-compile pyproject.toml requirements-dev.in"],
+        "file_dep": ["pyproject.toml", "requirements-dev.in"],
+        "targets": ["requirements.txt"],
+    }
+
+
 def task_upload_test():
     return {
         "actions": ["py -m twine upload -r testpypi dist/*"],
-        "task_dep": ["build"],
-        "verbosity": 2,
+        "task_dep": ["build_dist"],
     }
+
+
+def task_test_tox():
+    return {"actions": ["py -m tox"], "verbosity": 2}
