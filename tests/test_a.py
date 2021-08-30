@@ -73,7 +73,8 @@ async def test_zzz() -> None:
     t = [asyncio.create_task(a_()) for x in range(5)]
     await asyncio.sleep(0.1)
     t[0].cancel()
-    s = await asyncio.gather(*t, return_exceptions=True)
+    done, pend = await asyncio.wait(t, timeout=1)
+    s = await asyncio.gather(*done, return_exceptions=True)
     warn(f'{s=}')
 
 @pytest.mark.asyncio
