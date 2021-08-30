@@ -49,14 +49,32 @@ async def test_await_impl() -> None:
     await b()
 
 
-def test_zzz():
-    import importlib.metadata
-    import packaging.version
-    import pp
-    warn(f'''{importlib.metadata.version('perder_si_py3')=}''')
-    warn(f'''{packaging.version.parse(importlib.metadata.version('perder_si_py3'))=}''')
-    warn(f'{pp.__version__}')
-
+@pytest.mark.asyncio
+async def test_zzz() -> None:
+    async def b():
+        try:
+            await asyncio.sleep(ALOT)
+        except asyncio.CancelledError as e:
+            warn(f'1 {e=}')
+            raise
+    async def a():
+        await b()
+    async def a_():
+        try:
+            tt = asyncio.create_task(b())
+            tt2 = asyncio.create_task(b())
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            await tt
+        except asyncio.CancelledError as e:
+            warn(f'2 {e=}')
+            raise
+    t = [asyncio.create_task(a_()) for x in range(5)]
+    await asyncio.sleep(0.1)
+    t[0].cancel()
+    s = await asyncio.gather(*t, return_exceptions=True)
+    warn(f'{s=}')
 
 @pytest.mark.asyncio
 async def test_b() -> None:

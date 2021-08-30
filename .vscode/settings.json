@@ -8,5 +8,6 @@
         "**/.mypy_cache": true,
         "**/.pytest_cache": true,
         "**/*.egg-info": true
-    }
+    },
+    "python.formatting.provider": "black"
 }
