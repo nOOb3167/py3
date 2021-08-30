@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel", "setuptools_scm[toml]", "pip-tools", "packaging"]
+requires = ["build", "setuptools", "wheel", "setuptools_scm[toml]", "pip-tools", "packaging", "doit"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
