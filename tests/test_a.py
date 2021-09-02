@@ -1,12 +1,48 @@
 import asyncio
+import contextlib
+import dataclasses
+import dis
 import logging
-import pytest
-import re
+import pathlib
+import sys
 import traceback
+
+import pp.taskgroup as tg
+import pytest
 
 ALOT = 99999
 
 warn = logging.warning
+
+
+def pexc(*, z=sys.stderr):
+    ei = sys.exc_info()
+    te = traceback.TracebackException(ei[0], ei[1], ei[2])
+
+    @dataclasses.dataclass
+    class D:
+        name: str
+        fname: str
+        lineno: int
+        line: str
+
+    ds = list(
+        reversed([D(pathlib.Path(f.filename).name, f.name, f.lineno, f.line) for f in te.stack])
+    )
+    mf1 = len(max(ds, key=lambda x: len(x.name)).name)
+    mf2 = len(max(ds, key=lambda x: len(x.fname)).fname)
+    mf3 = len(str(max(ds, key=lambda x: len(str(x.lineno))).lineno))
+
+    print(f"""== Exception {("|".join(list(te.format_exception_only())).strip())} ==""", file=z)
+
+    for d in ds:
+        print(f"""{d.name:<{mf1}}:{d.lineno:<{mf3}}::{d.fname:<{mf2}} = {d.line}""", file=z)
+
+    print("== Exception END ==", file=z)
+
+
+def ein(v):
+    return type(v), v, v.__traceback__
 
 
 def strexc(v: BaseException):
@@ -204,3 +240,276 @@ def test_zz() -> None:
             so, se = p.communicate("helloworld")
             warn(f"{so=} {se=}")
             assert p.returncode == 0
+
+
+def test_exc0() -> None:
+    def sep(msg=""):
+        print("======", file=sys.stderr)
+        print(f"=== {msg} ===", file=sys.stderr)
+        print("======", file=sys.stderr)
+
+    sep("dis")
+
+    def a():
+        with None:
+            pass
+
+    dis.dis(a, file=sys.stderr)
+
+    sep()
+
+    def a():
+        raise RuntimeError()
+
+    def b():
+        a()
+
+    def c():
+        try:
+            b()
+        except Exception as e:
+            pexc()
+            exc = e
+        raise exc
+
+    def d():
+        c()
+
+    try:
+        d()
+    except Exception as e:
+        pexc()
+
+    sep()
+
+    def a():
+        raise RuntimeError()
+
+    def b():
+        a()
+
+    def c():
+        try:
+            b()
+        except Exception as e:
+            exc = e
+        return exc
+
+    def d():
+        return c()
+
+    def e():
+        raise d()
+
+    try:
+        e()
+    except Exception as e:
+        pexc()
+
+    sep("dec raise")
+
+    @contextlib.contextmanager
+    def m0():
+        try:
+            yield
+        except Exception as e:
+            pexc()
+            exc = e
+        raise exc
+
+    def c():
+        with m0():
+            raise RuntimeError()
+
+    try:
+        c()
+    except Exception as e:
+        pexc()
+
+    sep("dec raise RuntimeError from exc")
+
+    @contextlib.contextmanager
+    def m0():
+        try:
+            yield
+        except Exception as e:
+            pexc()
+            exc = e
+        raise RuntimeError() from exc
+
+    def c():
+        with m0():
+            raise RuntimeError()
+
+    try:
+        c()
+    except Exception as e:
+        pexc()
+
+    sep("dec throw raise")
+
+    @contextlib.contextmanager
+    def m0():
+        def q():
+            yield
+
+        z = q()
+        next(z)
+        try:
+            yield
+        except Exception as e:
+            pexc()
+            try:
+                z.throw(e)
+            except Exception as e2:
+                assert e == e2
+                exc = e
+        raise exc
+
+    def c():
+        with m0():
+            raise RuntimeError()
+
+    try:
+        c()
+    except Exception as e:
+        pexc()
+
+    sep("gen suppress")
+
+    class m0:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, typ, val, tb):
+            return False
+
+    def c():
+        with m0():
+            raise RuntimeError()
+
+    try:
+        c()
+    except Exception as e:
+        pexc()
+
+    sep("gen raise")
+
+    class m0:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, typ, val, tb):
+            raise val
+
+    def c():
+        with m0():
+            raise RuntimeError()
+
+    try:
+        c()
+    except Exception as e:
+        pexc()
+
+    sep("gen raise2")
+
+    def gen():
+        try:
+            yield
+        except Exception as e:
+            r = RuntimeError("2")  # BaseException vs Exception
+            r.__traceback__ = e.__traceback__
+            raise r
+
+    class m0:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, typ, val, tb):
+            z = gen()
+            next(z)
+            assert val is not None
+            z.throw(typ, val, tb)
+
+    def e():
+        raise RuntimeError("1")
+
+    def d():
+        e()
+
+    def c():
+        with m0():
+            d()
+
+    try:
+        c()
+    except Exception as e:
+        pexc()
+
+    sep("gen raise3")
+
+    def gen():
+        try:
+            yield
+        except Exception as e:
+            raise
+
+    class m0:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, typ, val, tb):
+            z = gen()
+            next(z)
+            assert val is not None
+            try:
+                z.throw(typ, val, tb)
+            except Exception as e:
+                r = RuntimeError("2")  # BaseException vs Exception
+                r.__traceback__ = e.__traceback__
+                raise r from None
+
+    def e():
+        raise RuntimeError("1")
+
+    def d():
+        e()
+
+    def c():
+        with m0():
+            d()
+
+    try:
+        c()
+    except Exception as e:
+        pexc()
+
+
+@pytest.mark.asyncio
+async def test_exc1() -> None:
+    async def a():
+        wa = tg.Waiter()
+        await b(wa)
+
+    async def b(wa: tg.Waiter):
+        async with tg.Group(waiter=wa) as gr:
+            gr.track(c())
+            gr.track(c())
+            await asyncio.sleep(0.1)
+
+            async def d():
+                raise RuntimeError("d")
+
+            try:
+                await d()
+            except:
+                raise RuntimeError("b")
+
+    async def c():
+        try:
+            await asyncio.sleep(1)
+        except BaseException as e:
+            pexc()
+            raise
+
+    await a()
