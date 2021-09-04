@@ -23,7 +23,7 @@ def task_build_dist():
 
 def task_build_deps():
     return {
-        "actions": ["pip-compile pyproject.toml requirements-dev.in"],
+        "actions": ["pip-compile --upgrade pyproject.toml requirements-dev.in"],
         "file_dep": ["pyproject.toml", "requirements-dev.in"],
         "targets": ["requirements.txt"],
     }
