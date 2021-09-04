@@ -3,10 +3,10 @@ import sys
 import threading
 import traceback
 
-err = []
+err: list[BaseException] = []
 q = queue.Queue()
 
-def ti():
+def ti() -> None:
     try:
         while True:
             d = sys.stdin.read(1)
@@ -17,7 +17,7 @@ def ti():
         err.append(e)
         traceback.print_exc(file=sys.stderr)
 
-def to():
+def to() -> None:
     try:
         while True:
             d = q.get()
@@ -31,7 +31,7 @@ def to():
         err.append(e)
         traceback.print_exc(file=sys.stderr)
 
-def run():
+def run() -> None:
     t1 = threading.Thread(target=ti)
     t2 = threading.Thread(target=to)
     t1.start()

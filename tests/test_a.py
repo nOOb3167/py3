@@ -17,6 +17,7 @@ warn = logging.warning
 
 def pexc(*, z=sys.stderr):
     ei = sys.exc_info()
+    assert ei[0] is not None and ei[1] is not None and ei[2] is not None
     te = traceback.TracebackException(ei[0], ei[1], ei[2])
 
     @dataclasses.dataclass
@@ -26,9 +27,7 @@ def pexc(*, z=sys.stderr):
         lineno: int
         line: str
 
-    ds = list(
-        reversed([D(pathlib.Path(f.filename).name, f.name, f.lineno, f.line) for f in te.stack])
-    )
+    ds = list(reversed([D(pathlib.Path(f.filename).name, f.name, f.lineno, f.line) for f in te.stack]))
     mf1 = len(max(ds, key=lambda x: len(x.name)).name)
     mf2 = len(max(ds, key=lambda x: len(x.fname)).fname)
     mf3 = len(str(max(ds, key=lambda x: len(str(x.lineno))).lineno))
@@ -242,22 +241,15 @@ def test_zz() -> None:
             assert p.returncode == 0
 
 
-def test_exc0() -> None:
-    def sep(msg=""):
-        print("======", file=sys.stderr)
-        print(f"=== {msg} ===", file=sys.stderr)
-        print("======", file=sys.stderr)
-
-    sep("dis")
-
+def test_dis() -> None:
     def a():
-        with None:
+        with contextlib.nullcontext():
             pass
 
     dis.dis(a, file=sys.stderr)
 
-    sep()
 
+def test_st0() -> None:
     def a():
         raise RuntimeError()
 
@@ -280,8 +272,8 @@ def test_exc0() -> None:
     except Exception as e:
         pexc()
 
-    sep()
 
+def test_st1() -> None:
     def a():
         raise RuntimeError()
 
@@ -303,11 +295,11 @@ def test_exc0() -> None:
 
     try:
         e()
-    except Exception as e:
+    except Exception as _:
         pexc()
 
-    sep("dec raise")
 
+def test_dec_raise() -> None:
     @contextlib.contextmanager
     def m0():
         try:
@@ -315,7 +307,7 @@ def test_exc0() -> None:
         except Exception as e:
             pexc()
             exc = e
-        raise exc
+        raise exc  # type: ignore
 
     def c():
         with m0():
@@ -326,8 +318,8 @@ def test_exc0() -> None:
     except Exception as e:
         pexc()
 
-    sep("dec raise RuntimeError from exc")
 
+def test_dec_raise_from_exc() -> None:
     @contextlib.contextmanager
     def m0():
         try:
@@ -335,7 +327,7 @@ def test_exc0() -> None:
         except Exception as e:
             pexc()
             exc = e
-        raise RuntimeError() from exc
+        raise RuntimeError() from exc  # type: ignore
 
     def c():
         with m0():
@@ -346,8 +338,8 @@ def test_exc0() -> None:
     except Exception as e:
         pexc()
 
-    sep("dec throw raise")
 
+def test_dec_throw_raise() -> None:
     @contextlib.contextmanager
     def m0():
         def q():
@@ -364,7 +356,7 @@ def test_exc0() -> None:
             except Exception as e2:
                 assert e == e2
                 exc = e
-        raise exc
+        raise exc  # type: ignore
 
     def c():
         with m0():
@@ -375,8 +367,8 @@ def test_exc0() -> None:
     except Exception as e:
         pexc()
 
-    sep("gen suppress")
 
+def test_gen_suppress() -> None:
     class m0:
         def __enter__(self):
             return self
@@ -393,8 +385,8 @@ def test_exc0() -> None:
     except Exception as e:
         pexc()
 
-    sep("gen raise")
 
+def test_gen_raise() -> None:
     class m0:
         def __enter__(self):
             return self
@@ -411,8 +403,8 @@ def test_exc0() -> None:
     except Exception as e:
         pexc()
 
-    sep("gen raise2")
 
+def test_gen_raise2() -> None:
     def gen():
         try:
             yield
@@ -443,11 +435,11 @@ def test_exc0() -> None:
 
     try:
         c()
-    except Exception as e:
+    except Exception as _:
         pexc()
 
-    sep("gen raise3")
 
+def test_gen_raise3() -> None:
     def gen():
         try:
             yield
@@ -481,20 +473,20 @@ def test_exc0() -> None:
 
     try:
         c()
-    except Exception as e:
+    except Exception as _:
         pexc()
 
 
 @pytest.mark.asyncio
 async def test_exc1() -> None:
     async def a():
-        wa = tg.Waiter()
+        wa = tg.Waitee()
         await b(wa)
 
-    async def b(wa: tg.Waiter):
-        async with tg.Group(waiter=wa) as gr:
-            gr.track(c())
-            gr.track(c())
+    async def b(wa: tg.Waitee):
+        async with tg.Group(waitee=wa) as w:
+            await w.track_coro(c())
+            await w.track_coro(c())
             await asyncio.sleep(0.1)
 
             async def d():
