@@ -40,6 +40,12 @@ class Waitee:
         finally:
             waitee.tasks.clear()
 
+    def __str__(self) -> str:
+        name = type(self).__name__
+        tasks = len(self.tasks)
+        ndone = len([t for t in self.tasks if not t.done])
+        return f"""{name}(tasks={tasks}, ndone={ndone})"""
+
 
 class GroupBaseException(BaseException):
     src: BaseException
@@ -58,6 +64,9 @@ class GroupException(Exception):
         self.src = src
         self.waitee = waitee
 
+    def __str__(self):
+        return f"""GroupException({repr(self.src)}, {self.waitee})"""
+
 
 class Group(contextlib.AbstractAsyncContextManager[T]):
     waitee: Waitee
@@ -73,7 +82,7 @@ class Group(contextlib.AbstractAsyncContextManager[T]):
 
         if val is not None:
             if isinstance(val, Exception):
-                return GroupException(val, self.waitee)
+                raise GroupException(val, self.waitee)
             if isinstance(val, BaseException):
-                return GroupBaseException(val, self.waitee)
+                raise GroupBaseException(val, self.waitee)
             raise NotImplementedError()
