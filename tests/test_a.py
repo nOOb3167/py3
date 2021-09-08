@@ -74,7 +74,7 @@ async def test_await_impl() -> None:
         def __await__(self):
             if not fut.done():
                 asyncio.get_running_loop().call_soon(cb)
-                fut._asyncio_future_blocking = True
+                fut._asyncio_future_blocking = True # type: ignore
                 yield fut
                 assert fut.done()
             else:
@@ -484,13 +484,10 @@ async def test_exc1() -> None:
         await b(wa)
 
     async def b(wa: tg.Waitee):
-        async with tg.Group(waitee=wa) as w:
+        async with tg.Group() as w:
             await w.track_coro(c())
             await w.track_coro(c())
             await asyncio.sleep(0.1)
-
-            async def d():
-                raise RuntimeError("d")
 
             try:
                 await d()
@@ -503,5 +500,8 @@ async def test_exc1() -> None:
         except BaseException as e:
             pexc()
             raise
+
+    async def d():
+        raise RuntimeError("d")
 
     await a()
