@@ -129,6 +129,7 @@ class Fallba:
     async def exit(self) -> None:
         async with self.que_cond:
             self.que.put_nowait(_Exiting())
+            self.que_cond.notify()
         await self._wait_exited()
 
 
