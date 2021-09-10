@@ -505,3 +505,28 @@ async def test_exc1() -> None:
         raise RuntimeError("d")
 
     await a()
+
+@pytest.mark.asyncio
+async def test_exc2() -> None:
+    async def a():
+        async with tg.FallbaWait() as fw:
+            await b()
+
+    async def b():
+        async with tg.Group() as gr:
+            await gr.track_coro(c())
+            await gr.track_coro(c())
+            await asyncio.sleep(0.1)
+            await d()
+
+    async def c():
+        try:
+            await asyncio.sleep(1)
+        except BaseException as e:
+            pexc()
+            raise
+
+    async def d():
+        raise RuntimeError("d")
+
+    await a()

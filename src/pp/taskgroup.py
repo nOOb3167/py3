@@ -3,11 +3,14 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import dataclasses
+import itertools
 import pathlib
 import traceback
 import typing
 
 T = typing.TypeVar("T")
+
+g_fallba: contextvars.ContextVar[Fallba] = contextvars.ContextVar("fallba")
 
 
 class Waitee:
@@ -53,9 +56,13 @@ class Waitee:
         return f"""{name}(tasks={tasks}, ndone={ndone})"""
 
 
+class _Exiting:
+    pass
+
+
 class Fallba:
     que_cond: asyncio.Condition
-    que: asyncio.Queue[asyncio.Task]
+    que: asyncio.Queue[asyncio.Task | _Exiting]
     waitee: Waitee
     waiter: asyncio.Task
     waiter_err: list[BaseException]
@@ -63,27 +70,30 @@ class Fallba:
 
     def __init__(self):
         self.que_cond = asyncio.Condition()
-        self.que = asyncio.Queue[asyncio.Task]()
+        self.que = asyncio.Queue[asyncio.Task | _Exiting]()
         self.waitee = Waitee()
         self.waiter = asyncio.get_running_loop().create_task(
             self._waiter(), name=f"{type(self).__name__}::{self._waiter.__name__}"
         )
         self.waiter_err = []
-        self.exiting = False
 
     async def _waiter(self) -> None:
         await self._waiter_loop()
         if len(self.waiter_err):
-            raise RuntimeError(self.waiter_err)  # FIXME: raise BaseException should any be in waiter_err
+            raise RuntimeError(self.waiter_err)  # TODO: raise BaseException should any be in waiter_err
 
     async def _waiter_loop(self) -> None:
         while True:
             try:
                 async with self.que_cond:
                     await self.que_cond.wait_for(self._waiter_cond)
-                    ts = [self.que.get_nowait() for x in range(self.que.qsize())]
+                    ds = [self.que.get_nowait() for x in range(self.que.qsize())]
+                ts = typing.cast(
+                    typing.Iterable[asyncio.Task], itertools.takewhile(lambda x: isinstance(x, asyncio.Task), ds)
+                )
+                exiting = any(isinstance(x, _Exiting) for x in ds)  # TODO: O(N)
                 await self._waiter_wait_all(ts)
-                if self.exiting and not self.que.qsize():
+                if exiting:
                     return
             except asyncio.CancelledError as e:
                 raise asyncio.CancelledError(self.waiter_err) from e
@@ -91,7 +101,7 @@ class Fallba:
                 self.waiter_err.append(e)
 
     def _waiter_cond(self) -> bool:
-        return self.que.qsize() > 0 or self.exiting
+        return self.que.qsize() > 0
 
     async def _waiter_wait_all(self, tasks: typing.Iterable[asyncio.Task]) -> None:
         # resist cancellation - propagate only when finished waiting
@@ -113,29 +123,29 @@ class Fallba:
                 raise carrier
 
     async def _wait_exited(self) -> None:
-        done, pending = await asyncio.wait(self.waiter)
+        done, pending = await asyncio.wait([self.waiter])
         assert self.waiter.done()
 
     async def exit(self) -> None:
         async with self.que_cond:
-            self.exiting = True
+            self.que.put_nowait(_Exiting())
         await self._wait_exited()
 
 
 class FallbaWait:
-    fallba: Fallba
-
-    def __init__(self):
-        self.fallba = g_fallba.get()
+    _fallba: Fallba
+    _token: contextvars.Token[Fallba]
 
     async def __aenter__(self) -> None:
+        self._fallba = Fallba()
+        self._token = g_fallba.set(self._fallba)
         return None
 
     async def __aexit__(self, typ, val, tb) -> typing.Any:
-        await self.fallba.exit()
-
-
-g_fallba = contextvars.ContextVar("fallba", default=Fallba())
+        try:
+            await self._fallba.exit()
+        finally:
+            g_fallba.reset(self._token)
 
 
 class _GroupExceptionMixin:
@@ -203,15 +213,15 @@ class GroupExceptionWait:
         return None
 
     async def __aexit__(self, typ, val, tb) -> typing.Any:
-        if isinstance(val, GroupException) or isinstance(val, GroupBaseException):
-            await val.waitee.wait()
+        raise NotImplementedError()
 
 
 class Group:
-    waitee: Waitee = Waitee()
+    waitee: Waitee
     fallba: Fallba
 
     def __init__(self):
+        self.waitee = Waitee()
         self.fallba = g_fallba.get()
 
     async def __aenter__(self) -> Waitee:
@@ -229,4 +239,4 @@ class Group:
             elif isinstance(val, BaseException):
                 raise GroupBaseException(val, self.waitee)
             else:
-            raise NotImplementedError()
+                raise NotImplementedError()
