@@ -33,7 +33,7 @@ class Waitee:
                 t.cancel()
 
     def _track_task(self, t: asyncio.Task[T]) -> None:
-        self.tasks[t] = self.D(result=[t.result()] if t.done() else [])
+        self.tasks[t] = self.D(result=[t.result()] if t.done() and not t.cancelled() else [])
 
     async def track_coro(self, coro: typing.Awaitable[T], name: str | None = None) -> None:
         self._track_task(asyncio.get_running_loop().create_task(coro, name=name))
