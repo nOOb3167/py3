@@ -53,7 +53,8 @@ class Waitee:
         name = type(self).__name__
         tasks = len(self.tasks)
         ndone = len([t for t in self.tasks if not t.done])
-        return f"""{name}(tasks={tasks}, ndone={ndone})"""
+        ncanc = len([t for t in self.tasks if t.cancelled()])
+        return f"""{name}(tasks={tasks}, ndone={ndone}, ncanc={ncanc})"""
 
 
 class _Exiting:
@@ -84,43 +85,24 @@ class Fallba:
 
     async def _waiter_loop(self) -> None:
         while True:
-            try:
-                async with self.que_cond:
-                    await self.que_cond.wait_for(self._waiter_cond)
-                    ds = [self.que.get_nowait() for x in range(self.que.qsize())]
-                ts = typing.cast(
-                    typing.Iterable[asyncio.Task], itertools.takewhile(lambda x: isinstance(x, asyncio.Task), ds)
-                )
-                exiting = any(isinstance(x, _Exiting) for x in ds)  # TODO: O(N)
-                await self._waiter_wait_all(ts)
-                if exiting:
-                    return
-            except asyncio.CancelledError as e:
-                raise asyncio.CancelledError(self.waiter_err) from e
-            except BaseException as e:
-                self.waiter_err.append(e)
+            async with self.que_cond:
+                await self.que_cond.wait_for(self._waiter_cond)
+                ds = [self.que.get_nowait() for x in range(self.que.qsize())]
+            ts = typing.cast(
+                typing.Iterable[asyncio.Task], itertools.takewhile(lambda x: isinstance(x, asyncio.Task), ds)
+            )
+            exiting = any(isinstance(x, _Exiting) for x in ds)  # TODO: O(N)
+            await self._waiter_wait_all(ts)
+            if exiting:
+                return
 
     def _waiter_cond(self) -> bool:
         return self.que.qsize() > 0
 
     async def _waiter_wait_all(self, tasks: typing.Iterable[asyncio.Task]) -> None:
-        # resist cancellation - propagate only when finished waiting
-        errs = list[BaseException]()
-        try:
-            pending = set(tasks)
-            while len(pending):
-                try:
-                    done, pending = await asyncio.wait(pending)
-                except BaseException as e:
-                    self.waiter_err.append(e)
-        finally:
-            if len(errs):
-                isc = any(x for x in errs if isinstance(x, asyncio.CancelledError))
-                if isc:
-                    carrier = asyncio.CancelledError(errs)
-                else:
-                    carrier = RuntimeError(errs)
-                raise carrier
+        pending = set(tasks)
+        while len(pending):
+            done, pending = await asyncio.wait(pending)
 
     async def _wait_exited(self) -> None:
         done, pending = await asyncio.wait([self.waiter])

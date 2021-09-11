@@ -15,8 +15,13 @@ ALOT = 99999
 warn = logging.warning
 
 
-def pexc(*, z=sys.stderr):
-    ei = sys.exc_info()
+def pexc(xei = None, *, z=sys.stderr):
+    from _pytest._code.code import ExceptionInfo
+    if xei:
+        assert isinstance(xei, ExceptionInfo)
+        ei = (type(xei.value), xei.value, xei.value.__traceback__)
+    else:
+        ei = sys.exc_info()
     assert ei[0] is not None and ei[1] is not None and ei[2] is not None
     te = traceback.TracebackException(ei[0], ei[1], ei[2])
 
@@ -529,4 +534,6 @@ async def test_exc2() -> None:
     async def d():
         raise RuntimeError("d")
 
-    await a()
+    with pytest.raises(tg.GroupException) as ei:
+        await a()
+    pexc(ei)
