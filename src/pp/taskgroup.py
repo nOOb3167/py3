@@ -15,37 +15,62 @@ g_fallba: contextvars.ContextVar[Fallba] = contextvars.ContextVar("fallba")
 
 class WrapTask:
     task: asyncio.Task
-    result: typing.Any
-    exception: typing.Any
+    _restyp: int  # 0: NA, 1: val, 2: exc (& cancelled exc)
+    _result: typing.Any
 
     def __init__(self, task: asyncio.Task) -> None:
         self.task = task
+        self._restyp = 0
+        self._result = None
+
+    @property
+    def result(self):
+        if not self._restyp:
+            self._result_set_try()
+        if self._restyp != 1:
+            raise RuntimeError()
+        return self._result
+
+    @property
+    def exception(self):
+        if not self._restyp:
+            self._result_set_try()
+        if self._restyp != 2:
+            raise RuntimeError()
+        return self._result
+
+    def _result_set_try(self):
+        if self.task.done():
+            if self.task.cancelled():
+                self._restyp = 2
+                self._result = self.task._make_cancelled_error()  # type: ignore
+            elif (exc := self.task.exception()) is not None:
+                self._restype = 2
+                self._result = exc
+            else:
+                self._restype = 1
+                self._result = self.task.result()
 
 
 class Waitee:
-    @dataclasses.dataclass
-    class D:
-        result: list[typing.Any]
+    tasks: set[WrapTask]
 
-    tasks: dict[asyncio.Task, D] = {}
-
-    def __init__(self, tasks: typing.Iterable[asyncio.Task[T]] = []):
-        for t in tasks:
-            self._track_task(t)
+    def __init__(self):
+        self.tasks = set[WrapTask]()
 
     def empty(self) -> bool:
         return not len(self.tasks)
 
     def cancel(self) -> None:
-        for t in self.tasks.keys():
-            if not t.done():
-                t.cancel()
+        for t in self.tasks:
+            if not t.task.done():
+                t.task.cancel()
 
-    def _track_task(self, t: asyncio.Task[T]) -> None:
-        self.tasks[t] = self.D(result=[t.result()] if t.done() and not t.cancelled() else [])
+    def _track_task(self, t: WrapTask) -> None:
+        self.tasks.add(t)
 
     async def track_coro(self, coro: typing.Awaitable[T], name: str | None = None) -> None:
-        self._track_task(asyncio.get_running_loop().create_task(coro, name=name))
+        self._track_task(WrapTask(asyncio.get_running_loop().create_task(coro, name=name)))
 
     def track_from(self, waitee: Waitee) -> None:
         for t in waitee.tasks:
@@ -61,8 +86,8 @@ class Waitee:
     def __str__(self) -> str:
         name = type(self).__name__
         tasks = len(self.tasks)
-        ndone = len([t for t in self.tasks if not t.done])
-        ncanc = len([t for t in self.tasks if t.cancelled()])
+        ndone = len([t for t in self.tasks if t.task.done()])
+        ncanc = len([t for t in self.tasks if t.task.cancelled()])
         return f"""{name}(tasks={tasks}, ndone={ndone}, ncanc={ncanc})"""
 
 
@@ -151,14 +176,6 @@ class _GroupExceptionMixin:
     def __str__(self):
         name = type(self).__name__
         return f"""{name}({repr(self.src)}, {self.waitee})"""
-
-    def _waitee_results_available(self):
-        ts = self.waitee.tasks
-        for t in ts:
-            if t.cancelled():
-                e = t._make_cancelled_error()  # type: ignore
-            elif t.done():
-                pass
 
     def _traceback_exc(self, val: BaseException):
         assert val.__traceback__ is not None
