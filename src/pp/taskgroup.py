@@ -13,6 +13,15 @@ T = typing.TypeVar("T")
 g_fallba: contextvars.ContextVar[Fallba] = contextvars.ContextVar("fallba")
 
 
+class WrapTask:
+    task: asyncio.Task
+    result: typing.Any
+    exception: typing.Any
+
+    def __init__(self, task: asyncio.Task) -> None:
+        self.task = task
+
+
 class Waitee:
     @dataclasses.dataclass
     class D:
@@ -143,23 +152,36 @@ class _GroupExceptionMixin:
         name = type(self).__name__
         return f"""{name}({repr(self.src)}, {self.waitee})"""
 
+    def _waitee_results_available(self):
+        ts = self.waitee.tasks
+        for t in ts:
+            if t.cancelled():
+                e = t._make_cancelled_error()  # type: ignore
+            elif t.done():
+                pass
 
-class GroupBaseException(_GroupExceptionMixin, BaseException):
-    def __init__(self, src: BaseException, waitee: Waitee):
-        super().__init__(src, waitee)
-
-    def __str__(self):
-        return super().__str__()
+    def _traceback_exc(self, val: BaseException):
+        assert val.__traceback__ is not None
+        return traceback.TracebackException(type(val), val, val.__traceback__)
 
     def _format(self) -> list[str]:
-        return self._format_one(self.src)
-
-    def _format_one(self, val: BaseException) -> list[str]:
-        assert val.__traceback__ is not None
-
         out = list[str]()
+        te = self._traceback_exc(self.src)
+        out.extend(self._format_exc_one(te))
+        out.extend(self._format_tb_one(te))
+        return out
 
-        te = traceback.TracebackException(type(val), val, val.__traceback__)
+    def _format_exc_one(self, te: traceback.TracebackException) -> list[str]:
+        out = list[str]()
+        hedr = """== Exception """
+        fill = " " * len(hedr)
+        exco = list(te.format_exception_only())
+        for i, l in enumerate(exco):
+            out.append(f"""{hedr if i == 0 else fill}{l}""")
+        return out
+
+    def _format_tb_one(self, te: traceback.TracebackException) -> list[str]:
+        out = list[str]()
 
         @dataclasses.dataclass
         class D:
@@ -173,14 +195,18 @@ class GroupBaseException(_GroupExceptionMixin, BaseException):
         mf2 = len(max(ds, key=lambda x: len(x.fname)).fname)
         mf3 = len(str(max(ds, key=lambda x: len(str(x.lineno))).lineno))
 
-        out.append(f"""== Exception {("|".join(list(te.format_exception_only())).strip())} ==""")
-
         for d in ds:
             out.append(f"""{d.name:<{mf1}}:{d.lineno:<{mf3}}::{d.fname:<{mf2}} = {d.line}""")
 
-        out.append("== Exception END ==")
-
         return out
+
+
+class GroupBaseException(_GroupExceptionMixin, BaseException):
+    def __init__(self, src: BaseException, waitee: Waitee):
+        super().__init__(src, waitee)
+
+    def __str__(self):
+        return super().__str__()
 
 
 class GroupException(_GroupExceptionMixin, Exception):

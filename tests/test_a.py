@@ -10,15 +10,16 @@ import traceback
 import pp.taskgroup as tg
 import pytest
 
+import _pytest._code.code
+
 ALOT = 99999
 
 warn = logging.warning
 
 
-def pexc(xei = None, *, z=sys.stderr):
-    from _pytest._code.code import ExceptionInfo
+def pexc(xei: _pytest._code.code.ExceptionInfo | None = None, *, z=sys.stderr) -> None:
     if xei:
-        assert isinstance(xei, ExceptionInfo)
+        assert isinstance(xei, _pytest._code.code.ExceptionInfo)
         ei = (type(xei.value), xei.value, xei.value.__traceback__)
     else:
         ei = sys.exc_info()
@@ -79,7 +80,7 @@ async def test_await_impl() -> None:
         def __await__(self):
             if not fut.done():
                 asyncio.get_running_loop().call_soon(cb)
-                fut._asyncio_future_blocking = True # type: ignore
+                fut._asyncio_future_blocking = True  # type: ignore
                 yield fut
                 assert fut.done()
             else:
@@ -485,55 +486,29 @@ def test_gen_raise3() -> None:
 @pytest.mark.asyncio
 async def test_exc1() -> None:
     async def a():
-        wa = tg.Waitee()
-        await b(wa)
+        async with tg.FallbaWait() as fw:
+            async with tg.Group() as gr:
+                raise RuntimeError()
 
-    async def b(wa: tg.Waitee):
-        async with tg.Group() as w:
-            await w.track_coro(c())
-            await w.track_coro(c())
-            await asyncio.sleep(0.1)
+    with pytest.raises(tg.GroupException) as ei:
+        await a()
 
-            try:
-                await d()
-            except:
-                raise RuntimeError("b")
-
-    async def c():
-        try:
-            await asyncio.sleep(1)
-        except BaseException as e:
-            pexc()
-            raise
-
-    async def d():
-        raise RuntimeError("d")
-
-    await a()
 
 @pytest.mark.asyncio
 async def test_exc2() -> None:
     async def a():
         async with tg.FallbaWait() as fw:
-            await b()
+            async with tg.Group() as gr:
 
-    async def b():
-        async with tg.Group() as gr:
-            await gr.track_coro(c())
-            await gr.track_coro(c())
-            await asyncio.sleep(0.1)
-            await d()
+                async def b():
+                    await asyncio.sleep(1)
 
-    async def c():
-        try:
-            await asyncio.sleep(1)
-        except BaseException as e:
-            pexc()
-            raise
-
-    async def d():
-        raise RuntimeError("d")
+                await gr.track_coro(b())
+                await gr.track_coro(b())
+                await asyncio.sleep(0.1)
+                raise RuntimeError()
 
     with pytest.raises(tg.GroupException) as ei:
         await a()
     pexc(ei)
+    assert 0
