@@ -24,7 +24,7 @@ class WrapTask:
         self._result = None
 
     @property
-    def result(self):
+    def result(self) -> typing.Any:
         if not self._restyp:
             self._result_set_try()
         if self._restyp != 1:
@@ -32,23 +32,23 @@ class WrapTask:
         return self._result
 
     @property
-    def exception(self):
+    def exception(self) -> BaseException:
         if not self._restyp:
             self._result_set_try()
         if self._restyp != 2:
             raise RuntimeError()
         return self._result
 
-    def _result_set_try(self):
+    def _result_set_try(self) -> None:
         if self.task.done():
             if self.task.cancelled():
                 self._restyp = 2
                 self._result = self.task._make_cancelled_error()  # type: ignore
             elif (exc := self.task.exception()) is not None:
-                self._restype = 2
+                self._restyp = 2
                 self._result = exc
             else:
-                self._restype = 1
+                self._restyp = 1
                 self._result = self.task.result()
 
 
@@ -174,27 +174,40 @@ class _GroupExceptionMixin:
         self.waitee = waitee
 
     def __str__(self):
-        name = type(self).__name__
-        return f"""{name}({repr(self.src)}, {self.waitee})"""
+        # name = type(self).__name__
+        # return f"""{name}({repr(self.src)}, {self.waitee})"""
+        fmt = self._format()
+        return "\n" + "\n".join(fmt)
 
     def _traceback_exc(self, val: BaseException):
-        assert val.__traceback__ is not None
-        return traceback.TracebackException(type(val), val, val.__traceback__)
+        # assert val.__traceback__ is not None # TODO: apparently can be None
+        return traceback.TracebackException.from_exception(val)
 
     def _format(self) -> list[str]:
         out = list[str]()
+
         te = self._traceback_exc(self.src)
-        out.extend(self._format_exc_one(te))
-        out.extend(self._format_tb_one(te))
+        feo = self._format_exc_one(te, """== - """)
+        out.extend(feo)
+
+        for i, t in enumerate(self.waitee.tasks):
+            te = self._traceback_exc(t.exception)
+            feo = self._format_exc_one(te, f"""   {i} """)
+            out.extend(feo)
+
         return out
 
-    def _format_exc_one(self, te: traceback.TracebackException) -> list[str]:
+    def _format_exc_one(self, te: traceback.TracebackException, hedr: str, _tbident: int = 4) -> list[str]:
         out = list[str]()
-        hedr = """== Exception """
+
         fill = " " * len(hedr)
-        exco = list(te.format_exception_only())
-        for i, l in enumerate(exco):
-            out.append(f"""{hedr if i == 0 else fill}{l}""")
+        tbident = " " * _tbident
+
+        te = self._traceback_exc(self.src)
+        feo = list(te.format_exception_only())
+        out.extend([f"""{hedr if i == 0 else fill}{l}""".rstrip() for i, l in enumerate(feo)])
+        out.extend([f"""{tbident}{l}""" for l in self._format_tb_one(te)])
+
         return out
 
     def _format_tb_one(self, te: traceback.TracebackException) -> list[str]:
@@ -213,7 +226,7 @@ class _GroupExceptionMixin:
         mf3 = len(str(max(ds, key=lambda x: len(str(x.lineno))).lineno))
 
         for d in ds:
-            out.append(f"""{d.name:<{mf1}}:{d.lineno:<{mf3}}::{d.fname:<{mf2}} = {d.line}""")
+            out.append(f"""{d.name:<{mf1}}:{d.lineno:<{mf3}}::{d.fname:<{mf2}} = {d.line}""".rstrip())
 
         return out
 

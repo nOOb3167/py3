@@ -7,10 +7,9 @@ import pathlib
 import sys
 import traceback
 
+import _pytest._code.code
 import pp.taskgroup as tg
 import pytest
-
-import _pytest._code.code
 
 ALOT = 99999
 
@@ -506,9 +505,6 @@ async def test_exc2() -> None:
                 await gr.track_coro(b())
                 await gr.track_coro(b())
                 await asyncio.sleep(0.1)
-                raise RuntimeError()
+                raise RuntimeError("a")
 
-    with pytest.raises(tg.GroupException) as ei:
-        await a()
-    pexc(ei)
-    assert 0
+    await a()
