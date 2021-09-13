@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import dataclasses
+import enum
 import itertools
 import pathlib
 import traceback
@@ -12,43 +13,49 @@ T = typing.TypeVar("T")
 
 g_fallba: contextvars.ContextVar[Fallba] = contextvars.ContextVar("fallba")
 
+class Restyp(enum.Enum):
+    NA = 0
+    VAL = 1
+    EXC = 2
+
 
 class WrapTask:
+
     task: asyncio.Task
-    _restyp: int  # 0: NA, 1: val, 2: exc (& cancelled exc)
+    _restyp: Restyp
     _result: typing.Any
 
     def __init__(self, task: asyncio.Task) -> None:
         self.task = task
-        self._restyp = 0
+        self._restyp = Restyp.NA
         self._result = None
 
     @property
     def result(self) -> typing.Any:
-        if not self._restyp:
+        if self._restyp is Restyp.NA:
             self._result_set_try()
-        if self._restyp != 1:
+        if self._restyp is not Restyp.VAL:
             raise RuntimeError()
         return self._result
 
     @property
     def exception(self) -> BaseException:
-        if not self._restyp:
+        if self._restyp is Restyp.NA:
             self._result_set_try()
-        if self._restyp != 2:
+        if self._restyp is not Restyp.EXC:
             raise RuntimeError()
         return self._result
 
     def _result_set_try(self) -> None:
         if self.task.done():
             if self.task.cancelled():
-                self._restyp = 2
+                self._restyp = Restyp.EXC
                 self._result = self.task._make_cancelled_error()  # type: ignore
             elif (exc := self.task.exception()) is not None:
-                self._restyp = 2
+                self._restyp = Restyp.EXC
                 self._result = exc
             else:
-                self._restyp = 1
+                self._restyp = Restyp.VAL
                 self._result = self.task.result()
 
 
