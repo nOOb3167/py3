@@ -30,7 +30,6 @@ class WrapTask:
         self._restyp = Restyp.NA
         self._result = None
 
-    @property
     def result(self) -> typing.Any:
         if self._restyp is Restyp.NA:
             self._result_set_try()
@@ -38,7 +37,6 @@ class WrapTask:
             raise RuntimeError()
         return self._result
 
-    @property
     def exception(self) -> BaseException:
         if self._restyp is Restyp.NA:
             self._result_set_try()
@@ -198,7 +196,7 @@ class _GroupExceptionMixin:
         out.extend(feo)
 
         for i, t in enumerate(self.waitee.tasks):
-            te = self._traceback_exc(t.exception)
+            te = self._traceback_exc(t.exception())
             feo = self._format_exc_one(te, f"""   {i} """)
             out.extend(feo)
 
